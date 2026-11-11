@@ -20,18 +20,35 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.disable('x-powered-by');
 
-// 3. Khóa chặt CORS: Chỉ cho phép đúng domain của Frontend gọi vào và cho phép gửi HttpOnly Cookie
+// 3. Khóa chặt CORS: Hỗ trợ domain Frontend chỉ định và tự động cho phép các link preview trên Vercel (*.vercel.app)
 const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
-  .map((origin) => origin.trim());
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Cho phép request không có origin (như server-to-server của Next.js SSR) hoặc nằm trong whitelist
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Cho phép request không có origin (như server-to-server của Next.js SSR, cURL, health check)
+      if (!origin) {
         return callback(null, true);
       }
+
+      // Cho phép nếu nằm trong danh sách CLIENT_URL cấu hình
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Tự động cho phép các sub-domain deploy preview của Vercel (*.vercel.app)
+      try {
+        const url = new URL(origin);
+        if (url.hostname.endsWith('.vercel.app')) {
+          return callback(null, true);
+        }
+      } catch {
+        // Bỏ qua lỗi parse URL
+      }
+
       return callback(new Error('Bị chặn bởi chính sách bảo mật CORS.'));
     },
     credentials: true, // Bắt buộc để trình duyệt đính kèm HttpOnly Cookie
@@ -86,7 +103,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server BE đang chạy an toàn tại http://localhost:${PORT}`);
-});
+// 10. Chạy server ở môi trường local hoặc xuất app cho Vercel Serverless Function
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`✅ Server BE đang chạy an toàn tại http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
 

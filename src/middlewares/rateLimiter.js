@@ -1,10 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
 // 1. Giới hạn chung cho toàn bộ API (Chống spam F12 / DDoS nhẹ / cào dữ liệu)
-// Cho phép tối đa 100 request trong 15 phút trên mỗi IP
+// Nới lỏng 500 request trong 15 phút trên mỗi IP (tránh chặn nhầm khi đọc nhiều bài có nhiều ảnh)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 phút
-  max: 100,
+  max: 500,
   standardHeaders: true, // Trả về thông tin rate limit trong header `RateLimit-*`
   legacyHeaders: false, // Tắt header `X-RateLimit-*` cũ
   message: {
