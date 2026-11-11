@@ -2,11 +2,18 @@ const jwt = require('jsonwebtoken');
 
 /**
  * Middleware bảo vệ các route dành riêng cho Admin.
- * Đọc JWT từ HttpOnly Cookie (không thể bị đánh cắp qua F12 Console / XSS).
+ * Hỗ trợ đồng thời 2 cơ chế (Hybrid):
+ * 1. HttpOnly Cookie: `admin_token`
+ * 2. Header: `Authorization: Bearer <token>` (Dự phòng trường hợp trình duyệt chặn Third-party Cookie chéo domain giữa FE & BE)
  */
 const verifyAdminToken = (req, res, next) => {
   try {
-    const token = req.cookies?.admin_token;
+    let token = req.cookies?.admin_token;
+
+    // Nếu không có cookie, kiểm tra xem có Bearer token trong header không
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
 
     if (!token) {
       return res.status(401).json({
@@ -15,9 +22,12 @@ const verifyAdminToken = (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const jwtSecret =
+      process.env.JWT_SECRET ||
+      'super_secret_jwt_key_change_this_in_production_2026';
 
-    // Gắn thông tin admin vào request để sử dụng ở controller tiếp theo
+    const decoded = jwt.verify(token, jwtSecret);
+
     req.admin = {
       id: decoded.id,
       username: decoded.username,
@@ -25,11 +35,13 @@ const verifyAdminToken = (req, res, next) => {
 
     return next();
   } catch (error) {
-    // Nếu token hết hạn hoặc bị chỉnh sửa giả mạo -> xóa luôn cookie rác
+    const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+
     res.clearCookie('admin_token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
     });
 
     return res.status(401).json({

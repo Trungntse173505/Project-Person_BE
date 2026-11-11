@@ -4,11 +4,12 @@ const supabase = require('../config/supabase');
 
 // Cấu hình chuẩn cho HttpOnly Cookie bảo mật
 const getCookieOptions = () => {
-  const isProd = process.env.NODE_ENV === 'production';
+  // Khi ở production hoặc đang chạy trên Vercel Serverless
+  const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
   return {
-    httpOnly: true, // Chặn tuyệt đối JS ở trình duyệt (F12 Console) đọc cookie
-    secure: isProd, // Bắt buộc HTTPS khi lên production
-    sameSite: isProd ? 'none' : 'lax', // Chống CSRF
+    httpOnly: true, // Chặn tuyệt đối JS ở trình duyệt đọc cookie
+    secure: isProd, // Bắt buộc HTTPS khi lên production/Vercel
+    sameSite: isProd ? 'none' : 'lax', // Hỗ trợ cross-domain giữa FE và BE
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
     path: '/',
   };
@@ -68,10 +69,15 @@ const login = async (req, res) => {
         message: 'Tên đăng nhập hoặc mật khẩu không chính xác.',
       });
     }
+    const jwtSecret =
+      process.env.JWT_SECRET ||
+      'super_secret_jwt_key_change_this_in_production_2026';
+    const jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
+
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      jwtSecret,
+      { expiresIn: jwtExpiresIn }
     );
     res.cookie('admin_token', token, getCookieOptions());
     return res.status(200).json({
@@ -80,6 +86,7 @@ const login = async (req, res) => {
       data: {
         id: user.id,
         username: user.username,
+        token, // Trả kèm token để Frontend có thể gửi qua Header Authorization phòng trường hợp trình duyệt chặn cookie chéo domain
       },
     });
   } catch (err) {
